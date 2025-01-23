@@ -1,0 +1,11 @@
+server:
+  port: 8081
+
+config:
+  access-key-id: ${ACCESS_KEY_ID}
+  access-key-secret: ${ACCESS_KEY_SECRET}
+  region-id: ${REGION_ID:cn-shanghai}
+  endpoint: ${ENDPOINT:ecs.cn-shanghai.aliyuncs.com}
+  instance-id: ${INSTANCE_ID:i-uf6g8gvi5sryqszsvacv}
+  stopped-mode: ${STOPPED_MODE:StopCharging}
+  wait-duration: ${wait_duration:60000}
