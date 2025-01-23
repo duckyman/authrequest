@@ -1,5 +1,5 @@
 server:
-  port: 8081
+  port: 8080
 
 config:
   access-key-id: ${ACCESS_KEY_ID}
