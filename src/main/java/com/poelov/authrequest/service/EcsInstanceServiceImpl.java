@@ -5,6 +5,7 @@ import com.aliyun.sdk.service.ecs20140526.models.DescribeInstanceStatusRequest;
 import com.aliyun.sdk.service.ecs20140526.models.DescribeInstanceStatusResponse;
 import com.aliyun.sdk.service.ecs20140526.models.DescribeInstanceStatusResponseBody;
 import com.aliyun.sdk.service.ecs20140526.models.StartInstanceRequest;
+import com.aliyun.sdk.service.ecs20140526.models.StartInstanceResponse;
 import com.aliyun.sdk.service.ecs20140526.models.StopInstanceRequest;
 import com.aliyun.sdk.service.ecs20140526.models.StopInstanceResponse;
 import com.poelov.authrequest.config.InstanceStatusEnum;
@@ -39,21 +40,17 @@ public class EcsInstanceServiceImpl implements EcsInstanceService {
      * 启动实例
      */
     @Override
-    public void startInstance() {
+    public void startInstance() throws ExecutionException, InterruptedException {
         String instanceId = startInstanceRequest.getInstanceId();
         InstanceStatusEnum status = getInstanceStatus(instanceId);
         // 实例状态为未知或已经停止时，才可以执行启动操作
         if (status == InstanceStatusEnum.UNKNOWN || status == InstanceStatusEnum.Stopped) {
-            asyncClient.startInstance(startInstanceRequest).whenComplete((res, ex) -> {
-                if (ex != null) {
-                    log.error(ex.getMessage(), ex);
-                    return;
-                }
-                if (res.getStatusCode() == HttpStatus.OK.value()) {
-                    log.info("Starting Instance {} ...", startInstanceRequest.getInstanceId());
-                    instanceStatusMap.put(startInstanceRequest.getInstanceId(), InstanceStatusEnum.Starting);
-                }
-            });
+            CompletableFuture<StartInstanceResponse> future = asyncClient.startInstance(startInstanceRequest);
+            StartInstanceResponse response = future.get();
+            if (response.getStatusCode() == HttpStatus.OK.value()) {
+                log.info("Starting Instance {} ...", startInstanceRequest.getInstanceId());
+                instanceStatusMap.put(startInstanceRequest.getInstanceId(), InstanceStatusEnum.Starting);
+            }
         }
     }
 
@@ -102,17 +99,20 @@ public class EcsInstanceServiceImpl implements EcsInstanceService {
     @Override
     public synchronized void stopInstance() throws ExecutionException, InterruptedException {
         String instanceId = startInstanceRequest.getInstanceId();
-        InstanceStatusEnum status = getInstanceStatus(instanceId);
-
-        // 实例不等于未知或已经停止或正在停止时，才可以执行停止操作
-        if (status != InstanceStatusEnum.UNKNOWN && status != InstanceStatusEnum.Stopped && status != InstanceStatusEnum.Stopping) {
-            CompletableFuture<StopInstanceResponse> future = asyncClient.stopInstance(stopInstanceRequest);
-            StopInstanceResponse response = future.get();
-
-            if (response.getStatusCode() == HttpStatus.OK.value()) {
-                log.info("Stopping Instance {} ... ", instanceId);
-                instanceStatusMap.put(instanceId, InstanceStatusEnum.Stopping);
+        queryInstanceStatus(instanceStatus -> {
+            if (instanceStatus.getInstanceId().equals(instanceId) && InstanceStatusEnum.valueOf(instanceStatus.getStatus()).equals(InstanceStatusEnum.Running)) {
+                CompletableFuture<StopInstanceResponse> future = asyncClient.stopInstance(stopInstanceRequest);
+                StopInstanceResponse response = null;
+                try {
+                    response = future.get();
+                    if (response.getStatusCode() == HttpStatus.OK.value()) {
+                        log.info("Stopping Instance {} ... ", instanceId);
+                        instanceStatusMap.put(instanceId, InstanceStatusEnum.Stopping);
+                    }
+                } catch (InterruptedException | ExecutionException e) {
+                    throw new RuntimeException(e);
+                }
             }
-        }
+        });
     }
 }

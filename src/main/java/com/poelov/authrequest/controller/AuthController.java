@@ -37,9 +37,10 @@ public class AuthController {
     }
 
     @GetMapping("/auth")
-    public ResponseEntity<Void> auth() {
+    public ResponseEntity<Void> auth() throws ExecutionException, InterruptedException {
         final String instanceId = config.getInstanceId();
         lastRequestTime = LocalDateTime.now();
+
         if (ecsInstanceService.getInstanceStatus(instanceId) != InstanceStatusEnum.Running) {
             ecsInstanceService.startInstance();
         }

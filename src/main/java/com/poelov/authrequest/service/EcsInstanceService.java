@@ -10,7 +10,7 @@ public interface EcsInstanceService {
     /**
      * 启动实例
      */
-    void startInstance();
+    void startInstance() throws ExecutionException, InterruptedException;
 
     /**
      * 同步实例状态
