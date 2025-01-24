@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.ExecutionException;
 
 @RestController
 @RequestMapping("/")
@@ -51,7 +52,7 @@ public class AuthController {
      * 定时任务 500 毫秒执行一次
      */
     @Scheduled(fixedRate = 500)
-    public void task() {
+    public void task() throws ExecutionException, InterruptedException {
         if (lastRequestTime == null) {
             return;
         }

@@ -6,6 +6,7 @@ import com.aliyun.sdk.service.ecs20140526.models.DescribeInstanceStatusResponse;
 import com.aliyun.sdk.service.ecs20140526.models.DescribeInstanceStatusResponseBody;
 import com.aliyun.sdk.service.ecs20140526.models.StartInstanceRequest;
 import com.aliyun.sdk.service.ecs20140526.models.StopInstanceRequest;
+import com.aliyun.sdk.service.ecs20140526.models.StopInstanceResponse;
 import com.poelov.authrequest.config.InstanceStatusEnum;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
 @Service
@@ -59,7 +61,7 @@ public class EcsInstanceServiceImpl implements EcsInstanceService {
      * 查询实例状态
      */
     @Override
-    public void syncInstanceStatus() {
+    public void syncInstanceStatus() throws ExecutionException, InterruptedException {
         queryInstanceStatus(instanceStatus -> {
             log.info("Instance {} status is {}", instanceStatus.getInstanceId(), instanceStatus.getStatus());
             instanceStatusMap.put(instanceStatus.getInstanceId(), InstanceStatusEnum.valueOf(instanceStatus.getStatus()));
@@ -70,20 +72,17 @@ public class EcsInstanceServiceImpl implements EcsInstanceService {
      * 查询实例状态
      */
     @Override
-    public void queryInstanceStatus(Consumer<DescribeInstanceStatusResponseBody.InstanceStatus> consumer) {
+    public void queryInstanceStatus(Consumer<DescribeInstanceStatusResponseBody.InstanceStatus> consumer) throws ExecutionException, InterruptedException {
         CompletableFuture<DescribeInstanceStatusResponse> future = asyncClient.describeInstanceStatus(describeInstanceStatusRequest);
-        future.whenComplete((res, ex) -> {
-            if (ex != null) {
-                log.error(ex.getMessage(), ex);
-            }
-            if (res.getStatusCode() == HttpStatus.OK.value()) {
-                res.getBody().getInstanceStatuses().getInstanceStatus().forEach(instanceStatus -> {
-                    if (consumer != null) {
-                        consumer.accept(instanceStatus);
-                    }
-                });
-            }
-        });
+        DescribeInstanceStatusResponse response = future.get();
+
+        if (response.getStatusCode() == HttpStatus.OK.value()) {
+            response.getBody().getInstanceStatuses().getInstanceStatus().forEach(instanceStatus -> {
+                if (consumer != null) {
+                    consumer.accept(instanceStatus);
+                }
+            });
+        }
     }
 
 
@@ -101,21 +100,19 @@ public class EcsInstanceServiceImpl implements EcsInstanceService {
      * 停止实例
      */
     @Override
-    public void stopInstance() {
+    public synchronized void stopInstance() throws ExecutionException, InterruptedException {
         String instanceId = startInstanceRequest.getInstanceId();
         InstanceStatusEnum status = getInstanceStatus(instanceId);
+
         // 实例不等于未知或已经停止或正在停止时，才可以执行停止操作
         if (status != InstanceStatusEnum.UNKNOWN && status != InstanceStatusEnum.Stopped && status != InstanceStatusEnum.Stopping) {
-            asyncClient.stopInstance(stopInstanceRequest).whenComplete((res, ex) -> {
-                if (ex != null) {
-                    log.error(ex.getMessage(), ex);
-                    return;
-                }
-                if (res.getStatusCode() == HttpStatus.OK.value()) {
-                    log.info("Stopping Instance {} ... ", instanceId);
-                    instanceStatusMap.put(instanceId, InstanceStatusEnum.Stopping);
-                }
-            });
+            CompletableFuture<StopInstanceResponse> future = asyncClient.stopInstance(stopInstanceRequest);
+            StopInstanceResponse response = future.get();
+
+            if (response.getStatusCode() == HttpStatus.OK.value()) {
+                log.info("Stopping Instance {} ... ", instanceId);
+                instanceStatusMap.put(instanceId, InstanceStatusEnum.Stopping);
+            }
         }
     }
 }
