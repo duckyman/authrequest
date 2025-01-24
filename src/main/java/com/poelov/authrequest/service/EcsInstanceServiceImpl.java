@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
@@ -37,16 +38,21 @@ public class EcsInstanceServiceImpl implements EcsInstanceService {
      */
     @Override
     public void startInstance() {
-        asyncClient.startInstance(startInstanceRequest).whenComplete((res, ex) -> {
-            if (ex != null) {
-                log.error(ex.getMessage(), ex);
-                return;
-            }
-            if (res.getStatusCode() == HttpStatus.OK.value()) {
-                log.info("Starting Instance {} ...", startInstanceRequest.getInstanceId());
-                instanceStatusMap.put(startInstanceRequest.getInstanceId(), InstanceStatusEnum.Starting);
-            }
-        });
+        String instanceId = startInstanceRequest.getInstanceId();
+        InstanceStatusEnum status = getInstanceStatus(instanceId);
+        // 实例状态为未知或已经停止时，才可以执行启动操作
+        if (status == InstanceStatusEnum.UNKNOWN || status == InstanceStatusEnum.Stopped) {
+            asyncClient.startInstance(startInstanceRequest).whenComplete((res, ex) -> {
+                if (ex != null) {
+                    log.error(ex.getMessage(), ex);
+                    return;
+                }
+                if (res.getStatusCode() == HttpStatus.OK.value()) {
+                    log.info("Starting Instance {} ...", startInstanceRequest.getInstanceId());
+                    instanceStatusMap.put(startInstanceRequest.getInstanceId(), InstanceStatusEnum.Starting);
+                }
+            });
+        }
     }
 
     /**
@@ -83,15 +89,12 @@ public class EcsInstanceServiceImpl implements EcsInstanceService {
 
     /**
      * 获取实例状态
+     * 实例不存在时返回未知
      */
     @Override
     public InstanceStatusEnum getInstanceStatus(String instanceId) {
-        InstanceStatusEnum instanceStatusEnum = instanceStatusMap.get(instanceId);
-        if (instanceStatusEnum != null) {
-            return instanceStatusEnum;
-        }
-        syncInstanceStatus();
-        return InstanceStatusEnum.Stopped;
+        InstanceStatusEnum status = instanceStatusMap.get(instanceId);
+        return Objects.requireNonNullElse(status, InstanceStatusEnum.UNKNOWN);
     }
 
     /**
@@ -99,15 +102,20 @@ public class EcsInstanceServiceImpl implements EcsInstanceService {
      */
     @Override
     public void stopInstance() {
-        asyncClient.stopInstance(stopInstanceRequest).whenComplete((res, ex) -> {
-            if (ex != null) {
-                log.error(ex.getMessage(), ex);
-                return;
-            }
-            if (res.getStatusCode() == HttpStatus.OK.value()) {
-                log.info("Stopping Instance {} ... ", startInstanceRequest.getInstanceId());
-                instanceStatusMap.put(startInstanceRequest.getInstanceId(), InstanceStatusEnum.Stopped);
-            }
-        });
+        String instanceId = startInstanceRequest.getInstanceId();
+        InstanceStatusEnum status = getInstanceStatus(instanceId);
+        // 实例不等于未知或已经停止或正在停止时，才可以执行停止操作
+        if (status != InstanceStatusEnum.UNKNOWN && status != InstanceStatusEnum.Stopped && status != InstanceStatusEnum.Stopping) {
+            asyncClient.stopInstance(stopInstanceRequest).whenComplete((res, ex) -> {
+                if (ex != null) {
+                    log.error(ex.getMessage(), ex);
+                    return;
+                }
+                if (res.getStatusCode() == HttpStatus.OK.value()) {
+                    log.info("Stopping Instance {} ... ", instanceId);
+                    instanceStatusMap.put(instanceId, InstanceStatusEnum.Stopping);
+                }
+            });
+        }
     }
 }

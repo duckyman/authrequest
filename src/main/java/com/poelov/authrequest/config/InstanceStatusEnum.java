@@ -25,4 +25,9 @@ public enum InstanceStatusEnum {
      * 已停止
      */
     Stopped,
+
+    /**
+     * 未知
+     */
+    UNKNOWN;
 }

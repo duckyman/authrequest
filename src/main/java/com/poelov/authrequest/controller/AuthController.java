@@ -56,20 +56,31 @@ public class AuthController {
             return;
         }
 
+        // 实例 id
         final String instanceId = config.getInstanceId();
+        // 服务器状态
+        final InstanceStatusEnum status = ecsInstanceService.getInstanceStatus(instanceId);
         // 设定的无操作的等待时间
         Long waitDuration = config.getWaitDuration();
         // 距离上次请求的时间
         long requestTimeDuration = Duration.between(lastRequestTime, LocalDateTime.now()).toMillis();
 
         // 小于等待时间，并且服务器状态不为 Running
-        if (requestTimeDuration < waitDuration && ecsInstanceService.getInstanceStatus(instanceId) != InstanceStatusEnum.Running) {
+        if (requestTimeDuration < waitDuration && status != InstanceStatusEnum.Running) {
             ecsInstanceService.syncInstanceStatus();
         }
 
-        // 超过等待时间，并且服务器状态不为 Stopped
-        if (requestTimeDuration > waitDuration && ecsInstanceService.getInstanceStatus(instanceId) != InstanceStatusEnum.Stopped) {
-            ecsInstanceService.stopInstance();
+        // 超过等待时间
+        if (requestTimeDuration > waitDuration) {
+            // 服务器状态不为 Stopped, 一直同步状态
+            if (status != InstanceStatusEnum.Stopped) {
+                ecsInstanceService.syncInstanceStatus();
+            }
+
+            // 服务器状态为 Running 时，停止服务器
+            if (status == InstanceStatusEnum.Running) {
+                ecsInstanceService.stopInstance();
+            }
         }
     }
 }
